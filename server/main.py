@@ -59,11 +59,5 @@ def get_icd10_codes_and_symptoms(text):
 def text_chunk(payload: Payload):
     # Sample text for lookup
     #text = "The patient was diagnosed with diabetes mellitus and hypertension."
-    text = payload.text
-
-    # Get the ICD-10-CM codes for the text
-    icd10_codes = get_icd10_codes(text)
-
-    # Print the ICD-10-CM codes
-    for code in icd10_codes:
-        print(f"Code: {code['Code']}, Description: {code['Description']}, Score: {code['Score']}")
+    result = get_icd10_codes_and_symptoms(payload.text)
+    return result
