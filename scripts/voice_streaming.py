@@ -90,21 +90,23 @@ async def get_transcript(
 
         dg_connection = deepgram.listen.asyncwebsocket.v("1")
 
+
+        messages = 0
+
         async def on_message(self, result, **kwargs):
+
             sentence = result.channel.alternatives[0].transcript
+
             if sentence:
+                print(f"Received: {sentence}")
                 transcript_collector.add_part(sentence)
-                full_sentence, lenght = transcript_collector.get_full_transcript()
-                if full_sentence:
-                    if transcript_collector.length_check():
-                        click.echo(f"\n--- {full_sentence} \n---\n")
-                        click.echo(f"{lenght}")
-                        transcript_collector.reset()
-                        result = requests.post(
+
+                result = requests.post(
                             url="http://localhost:8000/text-chunk/",
-                            json={"text": full_sentence},
+                            json={"text": sentence},
                         )
-                        print(result.status_code == 200)
+
+
 
         async def on_error(self, error, **kwargs):
             click.echo(f"\n\n{error}\n\n", err=True)
