@@ -90,7 +90,6 @@ async def get_transcript(
 
         dg_connection = deepgram.listen.asyncwebsocket.v("1")
 
-
         messages = 0
 
         async def on_message(self, result, **kwargs):
@@ -105,7 +104,6 @@ async def get_transcript(
                             url="http://localhost:8000/text-chunk/",
                             json={"text": sentence},
                         )
-
 
 
         async def on_error(self, error, **kwargs):
