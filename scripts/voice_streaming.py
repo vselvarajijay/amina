@@ -1,10 +1,11 @@
 import asyncio
 import signal
+from asyncio import Queue
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import aiohttp
 import click
-import requests
 from deepgram import (
     DeepgramClient,
     DeepgramClientOptions,
@@ -18,7 +19,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     DEEPGRAM_API_KEY: str = "deepgram-api-key"
-    BATCH_SIZE: int = 10
+    BATCH_SIZE: int
 
     class Config:
         env_file = ".env"
@@ -33,6 +34,7 @@ class SentenceChunk:
 class TranscriptCollector:
     def __init__(self, batch_size: int = 10):
         self.batch_size = batch_size
+        self.transcript_parts = []
         self.reset()
 
     def reset(self):
@@ -44,15 +46,12 @@ class TranscriptCollector:
         )
 
     def length_check(self) -> bool:
-        if len(self.transcript_parts) > 1:
+        if len(self.transcript_parts) >= 1:
             return (
-                self.transcript_parts[-1].created_at
-                - self.transcript_parts[0].created_at
+                datetime.now(tz=timezone.utc) - self.transcript_parts[0].created_at
             ).seconds > self.batch_size
-        return (
-            datetime.now(tz=timezone.utc) - self.transcript_parts[0].created_at.second
-            > self.batch_size
-        )
+        else:
+            return False
 
     def get_full_transcript(self):
         transcript_text = "\n".join([part.text for part in self.transcript_parts])
@@ -73,8 +72,7 @@ class TranscriptCollector:
 
 async def get_transcript(
     api_key: str,
-    transcript_collector: TranscriptCollector,
-    start_time: datetime = datetime.now(tz=timezone.utc),
+    sentence_queue: Queue,
 ):
     shutdown_event = asyncio.Event()
 
@@ -97,14 +95,10 @@ async def get_transcript(
             sentence = result.channel.alternatives[0].transcript
 
             if sentence:
-                print(f"Received: {sentence}")
-                transcript_collector.add_part(sentence)
-
-                result = requests.post(
-                            url="http://localhost:8000/text-chunk/",
-                            json={"text": sentence},
-                        )
-
+                click.echo(
+                    f"-{sentence}",
+                )
+                await sentence_queue.put(sentence)
 
         async def on_error(self, error, **kwargs):
             click.echo(f"\n\n{error}\n\n", err=True)
@@ -150,32 +144,77 @@ async def get_transcript(
             loop.remove_signal_handler(sig)
 
 
-@click.command()
-@click.option(
-    "--batch-size",
-    envvar="BATCH_SIZE",
-    help="Size of the batch to send to Deepgram",
-    default=10,
-)
-@click.option("--api-key", envvar="DEEPGRAM_API_KEY", help="Deepgram API Key")
-def main(api_key: str, batch_size: int):
-    """Run real-time transcription using Deepgram."""
-    if not api_key:
-        raise click.UsageError(
-            "The Deepgram API key is required. Set it using --api-key or the DEEPGRAM_API_KEY environment variable."
-        )
-    settings = Settings(
-        DEEPGRAM_API_KEY=api_key,
-        BATCH_SIZE=batch_size,
-    )
+async def process_queue(queue: Queue, batch_size: int, shutdown_event: asyncio.Event):
+    transcript_collector = TranscriptCollector(batch_size=batch_size)
+    timeout = aiohttp.ClientTimeout(total=0.5)
 
-    transcript_collector = TranscriptCollector(batch_size=settings.BATCH_SIZE)
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        while not shutdown_event.is_set():
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=0.1)
+                if message:
+                    transcript_collector.add_part(message)
+            except asyncio.TimeoutError:
+                pass
 
-    asyncio.run(
+            if transcript_collector.length_check():
+                click.echo(
+                    f"Processing queue from {transcript_collector.transcript_parts[0].created_at.strftime('%Y-%m-%d %H:%M:%S')} to {datetime.now(tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+                full_sentence, _ = transcript_collector.get_full_transcript()
+                transcript_collector.reset()
+                try:
+                    async with session.post(
+                        url="http://localhost:8000/text-chunk/",
+                        data={"text": full_sentence},
+                    ) as response:
+                        print(f"Request successful: {response.status == 200}")
+                except asyncio.TimeoutError:
+                    print("Request timed out after 1 second")
+                except aiohttp.ClientError as e:
+                    print(f"An error occurred during the request: {e}")
+
+    click.echo("Queue processing complete")
+
+
+async def main_async(api_key: str, batch_size: int):
+
+    sentence_queue = Queue()
+    shutdown_event = asyncio.Event()
+
+    transcript_task = asyncio.create_task(
         get_transcript(
-            api_key=settings.DEEPGRAM_API_KEY, transcript_collector=transcript_collector
+            api_key=api_key,
+            sentence_queue=sentence_queue,
         )
     )
+    process_task = asyncio.create_task(
+        process_queue(
+            queue=sentence_queue, batch_size=batch_size, shutdown_event=shutdown_event
+        )
+    )
+
+    await transcript_task
+
+    shutdown_event.set()
+
+    await process_task
+
+
+@click.command()
+@click.option("--batch-size", help="size of the batch to send to the server")
+def main(batch_size: int):
+    """Run real-time transcription using Deepgram."""
+    settings = Settings()
+    settings.BATCH_SIZE = int(batch_size)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(
+            main_async(settings.DEEPGRAM_API_KEY, settings.BATCH_SIZE)
+        )
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":

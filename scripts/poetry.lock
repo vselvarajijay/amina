@@ -1101,4 +1101,8 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
+<<<<<<< HEAD
 content-hash = "2ba35db5017927f01b58e670762b8e80de07be3c28aadc15e6b997c1db296441"
+=======
+content-hash = "6340e54e5f6aec42d7002699d9aa2a7e4589060144bf4d830e07a0098e3834b6"
+>>>>>>> 97c8fdf (feat: requests trigger)

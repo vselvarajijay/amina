@@ -5,6 +5,7 @@ description = ""
 authors = ["Your Name <you@example.com>"]
 license = "MIT"
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.11"
@@ -18,6 +19,7 @@ pydantic = "^2.8.2"
 python-dotenv = "^1.0.1"
 pydantic-settings = "^2.3.4"
 pyaudio = "^0.2.14"
+aiohttp = "^3.9.5"
 
 
 [tool.poetry.group.script.dependencies]
