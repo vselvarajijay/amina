@@ -1,4 +1,6 @@
 from typing import Union
+from multion.client import MultiOn
+
 import boto3
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -61,3 +63,18 @@ def text_chunk(payload: Payload):
     #text = "The patient was diagnosed with diabetes mellitus and hypertension."
     result = get_icd10_codes_and_symptoms(payload.text)
     return result
+
+
+@app.get("/test")
+def test():
+    client = MultiOn(
+        api_key="6e5f65dc1d7e4254a45ee1028ca4f64b",
+    )
+    response = client.browse(
+        cmd="Fill out a form.name: Jane Smith, status: Active, date: 2024-07-20, publisher: XYZ Health Services, description: This form is intended to document the mental health support plan for an individual experiencing depression., purpose: The purpose of this form is to outline the treatment and support strategies for managing the patient's depression., general_information: The general information provided in this form will assist healthcare professionals in developing an effective treatment plan for the patient suffering from depression., current_date: 2024-07-20",
+        url="https://app.medplum.com/Questionnaire/new",
+        local=True,
+        agent_id="0414969a",
+    )
+
+    return {"response": "success"}
