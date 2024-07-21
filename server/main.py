@@ -61,7 +61,9 @@ def get_icd10_codes_and_symptoms(text):
 def text_chunk(payload: Payload):
     # Sample text for lookup
     #text = "The patient was diagnosed with diabetes mellitus and hypertension."
+    print("received text: ", payload.text)
     result = get_icd10_codes_and_symptoms(payload.text)
+    print("result: ", result)
     return result
 
 

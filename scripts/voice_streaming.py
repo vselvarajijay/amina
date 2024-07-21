@@ -102,7 +102,7 @@ async def get_transcript(
                         transcript_collector.reset()
                         result = requests.post(
                             url="http://localhost:8000/text-chunk/",
-                            data={"text": full_sentence},
+                            json={"text": full_sentence},
                         )
                         print(result.status_code == 200)
 
